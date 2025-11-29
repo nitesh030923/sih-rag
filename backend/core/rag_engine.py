@@ -21,7 +21,7 @@ class RAGEngine:
     def __init__(self):
         """Initialize RAG engine."""
         self.ollama = ollama_client
-        self.max_context_length = 3000  # Character limit for context
+        self.max_context_length = 3000  
     
     def _build_prompt(
         self,
