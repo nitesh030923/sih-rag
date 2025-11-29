@@ -11,7 +11,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/schema_ollama.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -19,66 +19,48 @@ services:
       retries: 5
 
   # FastAPI Backend
-  api:
+  backend:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: rag_api
+      dockerfile: backend/Dockerfile
+    container_name: rag_backend
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/offrag
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      LLM_CHOICE: ${LLM_CHOICE:-mistral}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-mistral}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       LOG_LEVEL: INFO
-      PORT: 8000
     ports:
       - "8000:8000"
     volumes:
-      - ./.env:/app/.env
+      - .:/app
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-
-  # Streamlit UI
-  ui:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: rag_ui
-    depends_on:
-      - api
-    environment:
-      API_URL: http://api:8000
-    ports:
-      - "8501:8501"
-    command: ["uv", "run", "streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    command: ["python", "-m", "backend.main"]
     restart: unless-stopped
 
   # Document Ingestion (run manually)
   ingestion:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: backend/Dockerfile
     container_name: rag_ingestion
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/offrag
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      LLM_CHOICE: ${LLM_CHOICE:-mistral}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-mistral}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
     volumes:
-      - ./documents:/app/documents
-      - ./.env:/app/.env
+      - .:/app
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: ["uv", "run", "python", "-m", "ingestion.ingest", "--documents", "documents"]
+    command: ["python", "-m", "backend.ingestion.pipeline", "--documents", "documents"]
     profiles:
       - ingestion
 

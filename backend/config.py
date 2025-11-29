@@ -20,10 +20,10 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_llm_model: str = "mistral"
     ollama_embedding_model: str = "nomic-embed-text"
-    ollama_timeout: int = 300  # 5 minutes for slow responses
+    ollama_timeout: int = 300  
     
     # Embedding Configuration
-    embedding_dimensions: int = 768  # nomic-embed-text default
+    embedding_dimensions: int = 768  
     max_tokens_per_chunk: int = 512
     
     # RAG Configuration

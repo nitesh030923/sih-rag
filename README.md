@@ -1,359 +1,449 @@
-# Docling RAG Agent
+# RAG Backend with Ollama
 
-An intelligent RAG (Retrieval Augmented Generation) system with FastAPI backend and Streamlit UI that provides conversational access to a knowledge base stored in PostgreSQL with PGVector. Uses **Ollama** for fully offline/local LLM inference and embeddings. Supports multiple document formats including audio files with Whisper transcription.
+A production-ready **Retrieval-Augmented Generation (RAG)** backend built with FastAPI, SQLAlchemy, PostgreSQL/PGVector, and Ollama for fully local/offline LLM inference.
 
 ## 🌟 Features
 
-- 🌐 **FastAPI Backend** - RESTful API with streaming support
-- 🎨 **Streamlit UI** - Beautiful chat interface with real-time streaming
-- 🏠 **Fully Local/Offline** - Uses Ollama (no OpenAI API required)
-- 🔍 **Semantic Search** - Vector-embedded documents with PGVector
-- 📚 **Context-Aware Responses** - RAG pipeline with source citations
-- 🔄 **Real-time Streaming** - See responses as they're generated
-- 💾 **Scalable Storage** - PostgreSQL with PGVector extension
-- 🧠 **Conversation History** - Multi-turn context maintenance
-- 🎙️ **Audio Transcription** - Whisper ASR for MP3 files (optional)
-- 📄 **Multi-Format Support** - PDF, Word, Excel, PowerPoint, Markdown, Text, Audio
+- ✅ **Ollama-based** - fully offline
+- ✅ **FastAPI Backend** - RESTful API with streaming support
+- ✅ **SQLAlchemy ORM** - Clean database layer with async support
+- ✅ **PGVector Integration** - Semantic search with 768-dim embeddings
+- ✅ **Multi-format Support** - PDF, Word, Excel, PowerPoint, Markdown, Audio
+- ✅ **Hybrid Chunking** - Intelligent document splitting with Docling
+- ✅ **Audio Transcription** - Whisper ASR for MP3/WAV files
+- ✅ **Clean Architecture** - Organized, maintainable, testable code
 
-## 🎓 New to Docling?
+## 📁 Project Structure
 
-**Start with the tutorials!** Check out the [`docling_basics/`](./docling_basics/) folder for progressive examples:
-
-1. **Simple PDF Conversion** - Basic document processing
-2. **Multiple Format Support** - PDF, Word, PowerPoint handling  
-3. **Audio Transcription** - Speech-to-text with Whisper (optional)
-4. **Hybrid Chunking** - Intelligent chunking for RAG systems
-
-[**→ Go to Docling Basics**](./docling_basics/)
-
-## 📋 Prerequisites
-
-- **Python 3.9+**
-- **PostgreSQL with PGVector** (Docker provided)
-- **Ollama** installed and running locally
-- **FFmpeg** (optional, for audio transcription)
+```
+sih-rag/
+├── backend/
+│   ├── api/                    # API layer
+│   │   ├── routes.py           # All endpoints
+│   │   └── schemas.py          # Pydantic models
+│   ├── core/                   # Business logic
+│   │   ├── ollama_client.py    # Ollama HTTP client
+│   │   └── rag_engine.py       # RAG orchestration
+│   ├── database/               # Data layer
+│   │   ├── connection.py       # SQLAlchemy setup
+│   │   ├── models.py           # Document & Chunk models
+│   │   └── operations.py       # CRUD & vector search
+│   ├── ingestion/              # Document processing
+│   │   ├── pipeline.py         # Main ingestion script
+│   │   ├── chunker.py          # Document chunking
+│   │   └── embedder.py         # Embedding generation
+│   ├── config.py               # Centralized settings
+│   └── main.py                 # FastAPI app
+├── documents/                  # Place documents here
+├── sql/
+│   └── schema.sql              # PostgreSQL schema
+├── docker-compose.yml          # Container orchestration
+├── Dockerfile                  # Backend container
+├── pyproject.toml              # Dependencies
+└── .env.example                # Environment template
+```
 
 ## 🚀 Quick Start
 
-### 1. Install Ollama
+### Prerequisites
 
-Download and install from [ollama.ai](https://ollama.ai)
+- **Docker & Docker Compose** (recommended)
+- **Ollama** installed and running locally
+- **FFmpeg** (optional, for audio transcription)
+
+### Option 1: Docker Deployment (Recommended)
+
+#### 1. Install Ollama
+
+Download from [ollama.ai](https://ollama.ai)
 
 ```bash
 # Pull required models
 ollama pull mistral          # LLM for chat
-ollama pull nomic-embed-text # Embeddings (768-dim)
+ollama pull nomic-embed-text # 768-dim embeddings
 
-# Verify installation
+# Verify
 ollama list
 ```
 
-### 2. Start PostgreSQL with Docker
-
-```bash
-# Start PostgreSQL with PGVector
-docker-compose up -d postgres
-
-# Verify it's running
-docker ps
-```
-
-The database will automatically initialize with the correct schema (768-dimensional vectors for nomic-embed-text).
-
-### 3. Install Python Dependencies
-
-```bash
-# Install dependencies using UV
-uv sync
-
-# Or with pip
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment
-
-Copy `.env.example` to `.env`:
+#### 2. Configure Environment
 
 ```bash
 cp .env.example .env
 ```
 
-**Required variables:**
+Edit `.env` to point to your host's Ollama (Docker containers need host network):
 ```env
-# Database (Docker PostgreSQL on port 5433)
-DATABASE_URL=postgresql://postgres:postgres@localhost:5433/offrag
-
-# Ollama Configuration
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-LLM_CHOICE=mistral
-EMBEDDING_MODEL=nomic-embed-text
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/offrag
+OLLAMA_BASE_URL=http://host.docker.internal:11434  # For Mac/Windows
+# OLLAMA_BASE_URL=http://172.17.0.1:11434           # For Linux
+OLLAMA_LLM_MODEL=mistral
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 ```
 
-### 5. Ingest Documents
-
-Add your documents to the `documents/` folder:
-
-**Supported Formats:**
-- 📄 PDF (`.pdf`)
-- 📝 Word (`.docx`)
-- 📊 PowerPoint (`.pptx`)
-- 📈 Excel (`.xlsx`)
-- 📋 Markdown (`.md`)
-- 📃 Text (`.txt`)
-- 🎵 Audio (`.mp3`) - requires FFmpeg and torch (optional)
+#### 3. Start All Services
 
 ```bash
-# Start Ollama (if not running)
-ollama serve
+# Start PostgreSQL + Backend
+docker-compose up -d
 
-# Ingest documents
-uv run python -m ingestion.ingest --documents documents/
+# Check logs
+docker-compose logs -f backend
 ```
 
-**⚠️ Note:** Ingestion clears existing data before adding new documents.
-
-### 6. Start the Backend API
-
-```bash
-# Start FastAPI server
-uv run python api_ollama.py
-```
-
-API will be available at:
+API available at:
 - **Base**: http://localhost:8000
 - **Docs**: http://localhost:8000/docs
 - **Health**: http://localhost:8000/health
 
-### 7. Launch Streamlit UI
+#### 4. Upload Documents
+
+**Option A: Upload via API (Recommended)**
+
+Upload individual files through the REST API:
 
 ```bash
-# In a new terminal
-uv run streamlit run app.py
+# Using curl
+curl -X POST http://localhost:8000/upload \
+  -F "file=@/path/to/your/document.pdf"
+
+# Or use Swagger UI
+# Go to http://localhost:8000/docs → /upload endpoint
 ```
 
-Open browser to: **http://localhost:8501**
+**Option B: Batch Ingestion**
 
-## 🏗️ Architecture
-
-```
-┌──────────────┐
-│  Streamlit   │ ◄── User Interface (Port 8501)
-│      UI      │
-└──────┬───────┘
-       │ HTTP
-       ▼
-┌──────────────┐
-│   FastAPI    │ ◄── REST API (Port 8000)
-│   Backend    │     /health, /chat, /chat/stream
-└──────┬───────┘
-       │
-   ┌───┴────┬──────────┐
-   │        │          │
-   ▼        ▼          ▼
-┌─────┐ ┌─────┐ ┌──────────┐
-│Ollama│ │PG   │ │ Docling  │
-│(LLM)│ │Vec  │ │(Ingest)  │
-└─────┘ └─────┘ └──────────┘
-localhost  Docker   Document
-:11434    :5433    Processing
-```
-
-**Components:**
-- **Ollama** - Runs on host machine (mistral + nomic-embed-text)
-- **PostgreSQL** - Docker container with PGVector (768-dim vectors)
-- **FastAPI** - Backend API with streaming endpoints
-- **Streamlit** - Frontend UI with real-time chat
-- **Docling** - Document processing and chunking
-
-## 🎙️ Audio Transcription (Optional)
-
-Audio files are transcribed using **OpenAI Whisper Turbo** via Docling:
-
-### Setup for Audio:
-
-1. **Install FFmpeg**:
-```bash
-# Windows (Chocolatey - run as admin)
-choco install ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# Linux
-apt-get install ffmpeg
-```
-
-2. **Install audio dependencies**:
-```bash
-# Already included in pyproject.toml
-uv sync
-```
-
-3. **Add MP3 files** to `documents/` and run ingestion
-
-### How it works:
-- Whisper Turbo model transcribes audio
-- Generates markdown with timestamps: `[time: 0.0-4.0] Text here`
-- Audio content becomes fully searchable
-- Works with 90+ languages
-
-See [AUDIO_SETUP.md](./AUDIO_SETUP.md) for detailed setup instructions.
-
-## 🔑 Key Components
-
-### FastAPI Backend (`api_ollama.py`)
-- **REST API** with `/health`, `/chat`, `/chat/stream` endpoints
-- **Streaming support** for real-time responses
-- **Async architecture** with asyncpg connection pooling
-- **Native Ollama integration** using `/api/generate` endpoint
-
-### Streamlit UI (`app.py`)
-- **Real-time chat interface** with streaming responses
-- **Sidebar stats** showing KB size and model info
-- **Dark theme** with custom CSS styling
-- **Conversation history** maintained across messages
-
-### RAG Agent (`rag_agent_ollama.py`)
-- **Always-search pattern** (no function calling dependency)
-- **Semantic search** using nomic-embed-text (768-dim)
-- **Context injection** into prompts for LLM
-- **Native Ollama API** for better compatibility
-
-### Ingestion Pipeline (`ingestion/`)
-- **Document processing** with Docling (multi-format)
-- **Hybrid chunking** for semantic coherence
-- **Embedding generation** with Ollama
-- **PostgreSQL storage** with vector similarity
-
-### Database Schema
-
-**Documents table:**
-- Stores original documents with metadata
-- Fields: `id`, `title`, `source`, `content`, `metadata`
-
-**Chunks table:**
-- Stores text chunks with embeddings
-- `embedding`: vector(768) for nomic-embed-text
-- `chunk_index`, `token_count`, `metadata`
-
-**match_chunks() function:**
-- Vector similarity search with cosine distance
-- Returns chunks with similarity scores
-- Configurable threshold and result limit
-
-## Performance Optimization
-
-### Database Connection Pooling
-```python
-db_pool = await asyncpg.create_pool(
-    DATABASE_URL,
-    min_size=2,
-    max_size=10,
-    command_timeout=60
-)
-```
-
-### Embedding Cache
-The embedder includes built-in caching for frequently searched queries, reducing API calls and latency.
-
-### Streaming Responses
-Token-by-token streaming provides immediate feedback to users while the LLM generates responses:
-```python
-async with agent.run_stream(user_input, message_history=history) as result:
-    async for text in result.stream_text(delta=False):
-        print(f"\rAssistant: {text}", end="", flush=True)
-```
-
-## 🐳 Docker Deployment
-
-### Start with Docker Compose
+Process all files in the `documents/` folder at once:
 
 ```bash
-# Start PostgreSQL only
-docker-compose up -d postgres
+# Using API endpoint
+curl -X POST http://localhost:8000/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"documents_path": "documents", "clean_existing": false}'
 
-# Or start PostgreSQL + API + UI (requires Ollama on host)
-docker-compose up -d
-```
-
-**Services:**
-- `postgres` - PostgreSQL with PGVector (port 5433)
-- `api` - FastAPI backend (port 8000)
-- `ui` - Streamlit interface (port 8501)
-- `ingestion` - Document ingestion (manual profile)
-
-### Run Ingestion in Docker
-
-```bash
+# Or use ingestion container
 docker-compose --profile ingestion up ingestion
 ```
 
-### Notes:
-- **Ollama runs on host** machine at `http://host.docker.internal:11434`
-- Models must be pulled on host: `ollama pull mistral`
-- PostgreSQL data persists in Docker volume
-- Audio transcription works but increases image size (~2GB due to PyTorch)
+**Supported formats:**
+- 📄 PDF, Word, PowerPoint, Excel
+- 📝 Markdown, Text
+- 🎵 MP3, WAV, M4A, FLAC
 
-## API Reference
+#### 5. Stop Services
 
-### search_knowledge_base Tool
-
-```python
-async def search_knowledge_base(
-    ctx: RunContext[None],
-    query: str,
-    limit: int = 5
-) -> str:
-    """
-    Search the knowledge base using semantic similarity.
-
-    Args:
-        query: The search query to find relevant information
-        limit: Maximum number of results to return (default: 5)
-
-    Returns:
-        Formatted search results with source citations
-    """
+```bash
+docker-compose down
 ```
 
-### Database Functions
+---
 
-```sql
--- Vector similarity search
-SELECT * FROM match_chunks(
-    query_embedding::vector(1536),
-    match_count INT,
-    similarity_threshold FLOAT DEFAULT 0.7
-)
+### Option 2: Local Development (Without Docker)
+
+Use this for development only. Requires Python 3.9+ and PostgreSQL 15.
+
+#### 1. Install Ollama
+
+```bash
+ollama pull mistral
+ollama pull nomic-embed-text
 ```
 
-Returns chunks with:
-- `id`: Chunk UUID
-- `content`: Text content
-- `embedding`: Vector embedding
-- `similarity`: Cosine similarity score (0-1)
-- `document_title`: Source document title
-- `document_source`: Source document path
+#### 2. Start PostgreSQL
 
-## Project Structure
+```bash
+docker-compose up -d postgres
+```
+
+#### 3. Configure Environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/offrag
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_LLM_MODEL=mistral
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+```
+
+#### 4. Install Dependencies
+
+```bash
+pip install uv
+uv pip install -e .
+```
+
+#### 5. Start Backend
+
+```bash
+python -m backend.main
+```
+
+API available at http://localhost:8000/docs
+
+#### 6. Upload Documents
+
+Use the `/upload` API endpoint at http://localhost:8000/docs or:
+
+```bash
+curl -X POST http://localhost:8000/upload \
+  -F "file=@documents/your-file.pdf"
+```
+
+---
+
+## 🐳 Docker Services
+
+- `postgres` - PostgreSQL 15 with PGVector extension (port 5433)
+- `backend` - FastAPI application with auto-reload (port 8000)
+- `ingestion` - One-time document ingestion job (profile: ingestion)
+
+## 🔌 API Endpoints
+
+### Health Check
+
+```bash
+GET /health
+```
+
+Returns database status, Ollama status, and knowledge base stats.
+
+### Upload File
+
+```bash
+POST /upload
+Content-Type: multipart/form-data
+
+file: <your-file>
+```
+
+Upload and process a single document (PDF, DOCX, PPTX, XLSX, MD, TXT, MP3, WAV).
+
+### Batch Ingestion
+
+```bash
+POST /ingest
+Content-Type: application/json
+
+{
+  "documents_path": "documents",
+  "clean_existing": false
+}
+```
+
+Process all documents in a folder. Useful for initial bulk import.
+
+### Chat (Non-streaming)
+
+```bash
+POST /chat
+Content-Type: application/json
+
+{
+  "message": "What are the main topics?",
+  "conversation_history": [...]  # optional
+}
+```
+
+### Chat (Streaming)
+
+```bash
+POST /chat/stream
+Content-Type: application/json
+
+{
+  "message": "Explain the key concepts",
+  "conversation_history": [...]  # optional
+}
+```
+
+Returns Server-Sent Events (SSE) with streaming response.
+
+### Search Knowledge Base
+
+```bash
+POST /search
+Content-Type: application/json
+
+{
+  "query": "machine learning",
+  "limit": 5
+}
+```
+
+Returns relevant chunks with similarity scores.
+
+### List Documents
+
+```bash
+GET /documents?limit=100&offset=0
+```
+
+## ⚙️ Configuration
+
+All settings in `.env` or environment variables:
+
+### Database
+- `DATABASE_URL` - PostgreSQL connection string
+- `DB_POOL_MIN_SIZE` - Minimum pool size (default: 5)
+- `DB_POOL_MAX_SIZE` - Maximum pool size (default: 20)
+
+### Ollama
+- `OLLAMA_BASE_URL` - Ollama server URL (default: http://localhost:11434)
+- `OLLAMA_LLM_MODEL` - Chat model (default: mistral)
+- `OLLAMA_EMBEDDING_MODEL` - Embedding model (default: nomic-embed-text)
+- `OLLAMA_TIMEOUT` - Request timeout in seconds (default: 300)
+
+### RAG
+- `EMBEDDING_DIMENSIONS` - Vector dimensions (default: 768)
+- `TOP_K_RESULTS` - Number of chunks to retrieve (default: 5)
+- `SIMILARITY_THRESHOLD` - Minimum similarity score (default: 0.7)
+- `MAX_TOKENS_PER_CHUNK` - Max tokens per chunk (default: 512)
+
+### API
+- `API_HOST` - Server host (default: 0.0.0.0)
+- `API_PORT` - Server port (default: 8000)
+- `LOG_LEVEL` - Logging level (default: INFO)
+
+## 🏗️ Architecture
+
+### Data Flow
 
 ```
-docling-rag-agent/
-├── cli.py                   # Enhanced CLI with colors and features (recommended)
-├── rag_agent.py             # Basic CLI agent with PydanticAI
-├── ingestion/
-│   ├── ingest.py            # Document ingestion pipeline
-│   ├── embedder.py          # Embedding generation with caching
-│   └── chunker.py           # Document chunking logic
-├── utils/
-│   ├── providers.py         # OpenAI model/client configuration
-│   ├── db_utils.py          # Database connection pooling
-│   └── models.py            # Pydantic models for config
-├── sql/
-│   └── schema.sql           # PostgreSQL schema with PGVector
-├── documents/               # Sample documents for ingestion
-├── pyproject.toml           # Project dependencies
-├── .env.example             # Environment variables template
-└── README.md                # This file
+┌─────────────┐
+│  Documents  │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────────────────┐
+│  Ingestion Pipeline             │
+│  1. Read (Docling converts)     │
+│  2. Chunk (HybridChunker)       │
+│  3. Embed (Ollama)              │
+│  4. Store (PostgreSQL/PGVector) │
+└──────┬──────────────────────────┘
+       │
+       ▼
+┌──────────────────────┐
+│  PostgreSQL          │
+│  - documents table   │
+│  - chunks table      │
+│  - vector(768)       │
+└──────┬───────────────┘
+       │
+       ▼
+┌─────────────────────────────────┐
+│  RAG Engine                     │
+│  1. User Query                  │
+│  2. Generate Embedding (Ollama) │
+│  3. Vector Search (Cosine)      │
+│  4. Build Prompt + Context      │
+│  5. LLM Response (Ollama)       │
+└─────────────────────────────────┘
 ```
+
+### Components
+
+1. **Ollama Client** (`backend/core/ollama_client.py`)
+   - HTTP client for Ollama API
+   - Handles embeddings and chat completions
+   - Streaming support
+
+2. **RAG Engine** (`backend/core/rag_engine.py`)
+   - Always-search pattern (no function calling)
+   - Combines retrieval + generation
+   - Context injection into prompts
+
+3. **Database Layer** (`backend/database/`)
+   - SQLAlchemy async models
+   - PGVector integration
+   - CRUD operations + vector search
+
+4. **Ingestion Pipeline** (`backend/ingestion/`)
+   - Multi-format document processing
+   - Docling HybridChunker for intelligent splitting
+   - Batch embedding generation
+
+## 🧪 Development
+
+### Running Tests
+
+```bash
+pytest
+```
+
+### Code Quality
+
+```bash
+# Format
+black backend/
+
+# Lint
+ruff check backend/
+
+# Type check
+mypy backend/
+```
+
+## 📊 Database Schema
+
+### Documents Table
+
+| Column     | Type      | Description              |
+|------------|-----------|--------------------------|
+| id         | UUID      | Primary key              |
+| title      | TEXT      | Document title           |
+| source     | TEXT      | Source path              |
+| content    | TEXT      | Full document content    |
+| metadata   | JSONB     | Additional metadata      |
+| created_at | TIMESTAMP | Creation timestamp       |
+| updated_at | TIMESTAMP | Last update timestamp    |
+
+### Chunks Table
+
+| Column       | Type       | Description                |
+|--------------|------------|----------------------------|
+| id           | UUID       | Primary key                |
+| document_id  | UUID       | Foreign key to documents   |
+| content      | TEXT       | Chunk text content         |
+| embedding    | vector(768)| Embedding vector           |
+| chunk_index  | INTEGER    | Chunk position in document |
+| metadata     | JSONB      | Chunk metadata             |
+| token_count  | INTEGER    | Number of tokens           |
+| created_at   | TIMESTAMP  | Creation timestamp         |
+
+## 🐛 Troubleshooting
+
+### Ollama Not Responding
+
+```bash
+# Check Ollama is running
+ollama list
+
+# Restart Ollama
+ollama serve
+```
+
+### Database Connection Error
+
+```bash
+# Check PostgreSQL is running
+docker-compose ps
+
+# Check logs
+docker-compose logs postgres
+```
+
+### Import Errors
+
+```bash
+# Reinstall dependencies
+uv pip install -e . --force-reinstall
+```
+
+---
+
+**Built with ❤️ using Ollama, FastAPI, SQLAlchemy, and PostgreSQL/PGVector**
