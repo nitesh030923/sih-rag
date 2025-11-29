@@ -24,7 +24,7 @@ CREATE TABLE chunks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    embedding vector(1536),
+    embedding vector(768),
     chunk_index INTEGER NOT NULL,
     metadata JSONB DEFAULT '{}',
     token_count INTEGER,
@@ -36,7 +36,7 @@ CREATE INDEX idx_chunks_document_id ON chunks (document_id);
 CREATE INDEX idx_chunks_chunk_index ON chunks (document_id, chunk_index);
 
 CREATE OR REPLACE FUNCTION match_chunks(
-    query_embedding vector(1536),
+    query_embedding vector(768),
     match_count INT DEFAULT 10
 )
 RETURNS TABLE (
@@ -52,7 +52,7 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         c.id AS chunk_id,
         c.document_id,
         c.content,
