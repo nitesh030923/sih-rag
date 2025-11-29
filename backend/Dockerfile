@@ -21,7 +21,6 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml ./
 COPY backend ./backend
 COPY documents ./documents
-COPY sql ./sql
 
 # Install Python dependencies
 RUN uv pip install --system -e .
