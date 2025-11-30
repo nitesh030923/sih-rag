@@ -82,8 +82,14 @@ async def health_check(session: AsyncSession = Depends(get_db_session)):
             }
         )
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
+        logger.error(f"Health check failed: {e}", exc_info=True)
+        error_detail = {
+            "error": "Health check failed",
+            "message": str(e),
+            "type": type(e).__name__,
+            "hint": "Check if database and Ollama services are running"
+        }
+        raise HTTPException(status_code=503, detail=error_detail)
 
 
 # ============================================================================
@@ -123,9 +129,39 @@ async def chat(
             conversation_history=updated_history
         )
         
+    except ValueError as e:
+        logger.error(f"Chat validation error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Invalid request",
+                "message": str(e),
+                "type": "ValueError"
+            }
+        )
+    except ConnectionError as e:
+        logger.error(f"Chat connection error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Service unavailable",
+                "message": "Cannot connect to Ollama service",
+                "details": str(e),
+                "type": "ConnectionError",
+                "hint": "Check if Ollama is running and accessible"
+            }
+        )
     except Exception as e:
         logger.error(f"Chat endpoint error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Chat processing failed",
+                "message": str(e),
+                "type": type(e).__name__,
+                "hint": "Check logs for more details"
+            }
+        )
 
 
 @router.post("/chat/stream", tags=["Chat"])
@@ -215,9 +251,38 @@ async def search(
             total_results=len(items)
         )
         
+    except ValueError as e:
+        logger.error(f"Search validation error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Invalid search query",
+                "message": str(e),
+                "type": "ValueError"
+            }
+        )
+    except ConnectionError as e:
+        logger.error(f"Search connection error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Embedding service unavailable",
+                "message": "Cannot connect to Ollama for embeddings",
+                "details": str(e),
+                "type": "ConnectionError"
+            }
+        )
     except Exception as e:
         logger.error(f"Search endpoint error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Search failed",
+                "message": str(e),
+                "type": type(e).__name__,
+                "hint": "Ensure knowledge base is populated and Ollama is running"
+            }
+        )
 
 
 # ============================================================================
@@ -258,7 +323,15 @@ async def get_documents(
         
     except Exception as e:
         logger.error(f"List documents error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to list documents",
+                "message": str(e),
+                "type": type(e).__name__,
+                "hint": "Check database connection"
+            }
+        )
 
 
 # ============================================================================
@@ -295,9 +368,39 @@ async def ingest_documents(
             errors=result.get("errors", [])
         )
         
+    except FileNotFoundError as e:
+        logger.error(f"Ingestion path error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Documents path not found",
+                "message": str(e),
+                "type": "FileNotFoundError",
+                "hint": f"Check if path exists: {request.documents_path}"
+            }
+        )
+    except PermissionError as e:
+        logger.error(f"Ingestion permission error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "Permission denied",
+                "message": str(e),
+                "type": "PermissionError",
+                "hint": "Check file/folder permissions"
+            }
+        )
     except Exception as e:
         logger.error(f"Ingestion endpoint error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Ingestion failed",
+                "message": str(e),
+                "type": type(e).__name__,
+                "hint": "Check logs for detailed error information"
+            }
+        )
 
 
 @router.post("/upload", response_model=FileUploadResponse, tags=["Documents"])
@@ -392,10 +495,57 @@ async def upload_file(
             filename=file.filename
         )
         
-    except Exception as e:
-        # Clean up temp file on error
+    except FileNotFoundError as e:
         if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
             os.unlink(tmp_file_path)
-        
+        logger.error(f"File upload - file not found: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "File processing failed",
+                "message": "Temporary file was lost during processing",
+                "details": str(e),
+                "type": "FileNotFoundError"
+            }
+        )
+    except ValueError as e:
+        if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
+        logger.error(f"File upload - validation error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Invalid file content",
+                "message": str(e),
+                "type": "ValueError",
+                "hint": "File may be corrupted or in an unsupported format"
+            }
+        )
+    except ConnectionError as e:
+        if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
+        logger.error(f"File upload - connection error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Service unavailable",
+                "message": "Cannot connect to Ollama for embeddings",
+                "details": str(e),
+                "type": "ConnectionError",
+                "hint": "Ensure Ollama is running and accessible"
+            }
+        )
+    except Exception as e:
+        if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
         logger.error(f"File upload error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "File processing failed",
+                "message": str(e),
+                "type": type(e).__name__,
+                "filename": file.filename,
+                "hint": "Check if file is valid and Ollama service is running"
+            }
+        )
