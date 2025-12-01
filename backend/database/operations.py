@@ -299,6 +299,8 @@ async def vector_search(
     # Convert embedding to string format for pgvector
     embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
     
+    logger.info(f"Vector search: threshold={similarity_threshold}, limit={limit}")
+    
     result = await session.execute(
         query,
         {
@@ -309,6 +311,10 @@ async def vector_search(
     )
     
     rows = result.fetchall()
+    
+    logger.info(f"Vector search returned {len(rows)} results")
+    for row in rows:
+        logger.info(f"  - {row.document_title}: similarity={row.similarity:.4f}")
     
     return [
         SearchResult(
