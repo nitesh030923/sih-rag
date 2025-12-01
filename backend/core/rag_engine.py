@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional, AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.ollama_client import ollama_client
-from backend.database.operations import vector_search, SearchResult
+from backend.database.operations import vector_search, hybrid_search, SearchResult
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,8 @@ class RAGEngine:
     def __init__(self):
         """Initialize RAG engine."""
         self.ollama = ollama_client
-        self.max_context_length = 3000  
+        self.max_context_length = 3000
+        self.use_hybrid_search = True  # Enable hybrid search by default  
     
     def _build_prompt(
         self,
@@ -60,15 +61,19 @@ Your Answer (synthesize the information above into a clear response):"""
         self,
         session: AsyncSession,
         query: str,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        use_hybrid: Optional[bool] = None
     ) -> List[SearchResult]:
         """
         Search knowledge base for relevant chunks.
+        
+        Uses hybrid search (vector + keyword) by default for better results.
         
         Args:
             session: Database session
             query: Search query
             limit: Maximum number of results
+            use_hybrid: Override hybrid search setting (default: self.use_hybrid_search)
             
         Returns:
             List of SearchResult instances
@@ -77,13 +82,25 @@ Your Answer (synthesize the information above into a clear response):"""
         logger.info(f"Generating embedding for query: {query[:50]}...")
         query_embedding = await self.ollama.generate_embedding(query)
         
+        # Determine search method
+        should_use_hybrid = use_hybrid if use_hybrid is not None else self.use_hybrid_search
+        
         # Search vector database
-        logger.info("Searching knowledge base...")
-        results = await vector_search(
-            session,
-            query_embedding,
-            limit=limit or settings.top_k_results
-        )
+        if should_use_hybrid:
+            logger.info("Using hybrid search (vector + keyword)...")
+            results = await hybrid_search(
+                session,
+                query=query,
+                query_embedding=query_embedding,
+                limit=limit or settings.top_k_results
+            )
+        else:
+            logger.info("Using vector-only search...")
+            results = await vector_search(
+                session,
+                query_embedding,
+                limit=limit or settings.top_k_results
+            )
         
         logger.info(f"Found {len(results)} relevant chunks")
         return results

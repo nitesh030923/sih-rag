@@ -330,6 +330,278 @@ async def vector_search(
     ]
 
 
+def _extract_search_keywords(query: str) -> List[str]:
+    """
+    Extract meaningful keywords from a query for fuzzy search.
+    
+    Removes common stop words and short words that don't add value.
+    
+    Args:
+        query: User's search query
+        
+    Returns:
+        List of keywords to search for
+    """
+    stop_words = {
+        'what', 'where', 'when', 'which', 'that', 'this', 'there', 'their',
+        'have', 'been', 'were', 'from', 'with', 'they', 'them', 'then',
+        'than', 'these', 'those', 'will', 'would', 'could', 'should',
+        'about', 'after', 'before', 'between', 'into', 'through',
+        'during', 'above', 'below', 'does', 'doing', 'each', 'some',
+        'most', 'other', 'such', 'only', 'same', 'also', 'back',
+        'being', 'here', 'just', 'over', 'under', 'again', 'further',
+        'once', 'more', 'very', 'your', 'yours', 'yourself', 'what\'s',
+        'how', 'why', 'who', 'whom', 'the', 'and', 'but', 'for', 'are', 'was'
+    }
+    
+    words = []
+    for word in query.split():
+        # Clean the word
+        clean_word = word.strip('?.,!;:"\'()[]{}').lower()
+        # Keep words that are meaningful
+        if len(clean_word) >= 3 and clean_word not in stop_words:
+            words.append(clean_word)
+    
+    return words
+
+
+async def keyword_search(
+    session: AsyncSession,
+    query: str,
+    limit: int = None,
+    similarity_threshold: float = 0.3
+) -> List[SearchResult]:
+    """
+    Perform fuzzy keyword search using PostgreSQL's pg_trgm extension.
+    
+    Uses word_similarity for fuzzy matching that handles:
+    - OCR errors and typos (e.g., "Implementation" vs "Implementaon")
+    - Partial word matches within text
+    - Character transpositions
+    
+    Falls back to ILIKE if trigram search fails.
+    
+    Args:
+        session: Database session
+        query: Search query text
+        limit: Maximum number of results
+        similarity_threshold: Minimum trigram similarity (0.0-1.0, default 0.3)
+        
+    Returns:
+        List of SearchResult instances ordered by relevance
+    """
+    if limit is None:
+        limit = settings.top_k_results
+    
+    # Extract meaningful keywords from query
+    keywords = _extract_search_keywords(query)
+    
+    if not keywords:
+        logger.info("No meaningful keywords found in query")
+        return []
+    
+    logger.info(f"Keyword search for: {query[:50]}... (keywords: {keywords[:5]})")
+    
+    # Use word_similarity which finds the best matching word within the text
+    # This is better than similarity() for searching within longer text
+    try:
+        # Set the word similarity threshold
+        await session.execute(text(f"SET pg_trgm.word_similarity_threshold = {similarity_threshold}"))
+        
+        # Build conditions for each keyword using ILIKE for partial matching
+        # combined with word_similarity scoring for ranking
+        keyword_conditions = []
+        similarity_scores = []
+        params = {"limit": limit, "num_keywords": float(len(keywords))}
+        
+        for i, kw in enumerate(keywords):
+            # Use ILIKE with prefix to handle OCR issues (match first 4+ chars)
+            prefix = kw[:4] if len(kw) >= 4 else kw
+            keyword_conditions.append(f"c.content ILIKE :pattern{i}")
+            similarity_scores.append(f"word_similarity(:kw{i}, c.content)")
+            params[f"kw{i}"] = kw
+            params[f"pattern{i}"] = f"%{prefix}%"
+        
+        where_clause = " OR ".join(keyword_conditions)
+        score_clause = " + ".join(similarity_scores)
+        
+        fuzzy_query = text(f"""
+            SELECT 
+                c.id AS chunk_id,
+                c.document_id,
+                c.content,
+                ({score_clause}) / :num_keywords AS rank,
+                c.metadata,
+                d.title AS document_title,
+                d.source AS document_source
+            FROM chunks c
+            JOIN documents d ON c.document_id = d.id
+            WHERE {where_clause}
+            ORDER BY rank DESC
+            LIMIT :limit
+        """)
+        
+        result = await session.execute(fuzzy_query, params)
+        rows = result.fetchall()
+        
+        logger.info(f"Fuzzy keyword search returned {len(rows)} results")
+            
+    except Exception as e:
+        # Fallback to simple ILIKE search if fuzzy fails
+        logger.warning(f"Fuzzy search failed: {e}, falling back to ILIKE")
+        
+        # Build ILIKE conditions for each keyword
+        ilike_conditions = []
+        params = {"limit": limit}
+        for i, kw in enumerate(keywords[:3]):  # Limit to first 3 keywords
+            ilike_conditions.append(f"c.content ILIKE :pattern{i}")
+            params[f"pattern{i}"] = f"%{kw}%"
+        
+        where_clause = " OR ".join(ilike_conditions) if ilike_conditions else "TRUE"
+        
+        fallback_query = text(f"""
+            SELECT 
+                c.id AS chunk_id,
+                c.document_id,
+                c.content,
+                1.0 AS rank,
+                c.metadata,
+                d.title AS document_title,
+                d.source AS document_source
+            FROM chunks c
+            JOIN documents d ON c.document_id = d.id
+            WHERE {where_clause}
+            LIMIT :limit
+        """)
+        
+        result = await session.execute(fallback_query, params)
+        rows = result.fetchall()
+        logger.info(f"Fallback ILIKE search returned {len(rows)} results")
+    
+    return [
+        SearchResult(
+            chunk_id=row.chunk_id,
+            document_id=row.document_id,
+            content=row.content,
+            similarity=float(row.rank) if row.rank else 0.0,
+            chunk_metadata=row.metadata,
+            document_title=row.document_title,
+            document_source=row.document_source
+        )
+        for row in rows
+    ]
+
+
+def reciprocal_rank_fusion(
+    vector_results: List[SearchResult],
+    keyword_results: List[SearchResult],
+    k: int = 60,
+    vector_weight: float = 0.6,
+    keyword_weight: float = 0.4
+) -> List[SearchResult]:
+    """
+    Combine vector and keyword search results using Reciprocal Rank Fusion (RRF).
+    
+    RRF is a simple but effective method to combine multiple ranked lists.
+    Score = sum(weight / (k + rank)) for each list where the item appears.
+    
+    Args:
+        vector_results: Results from vector search
+        keyword_results: Results from keyword search
+        k: RRF constant (default 60, higher = more weight to lower ranks)
+        vector_weight: Weight for vector search results
+        keyword_weight: Weight for keyword search results
+        
+    Returns:
+        Combined and re-ranked list of SearchResult
+    """
+    # Create a map of chunk_id -> (result, rrf_score)
+    scores: Dict[UUID, tuple] = {}
+    
+    # Add vector search scores
+    for rank, result in enumerate(vector_results):
+        rrf_score = vector_weight / (k + rank + 1)
+        scores[result.chunk_id] = (result, rrf_score)
+    
+    # Add keyword search scores
+    for rank, result in enumerate(keyword_results):
+        rrf_score = keyword_weight / (k + rank + 1)
+        if result.chunk_id in scores:
+            # Combine scores if result appears in both lists
+            existing_result, existing_score = scores[result.chunk_id]
+            scores[result.chunk_id] = (existing_result, existing_score + rrf_score)
+        else:
+            scores[result.chunk_id] = (result, rrf_score)
+    
+    # Sort by combined RRF score and return
+    sorted_results = sorted(scores.values(), key=lambda x: x[1], reverse=True)
+    
+    # Update similarity scores to reflect RRF ranking
+    final_results = []
+    for result, rrf_score in sorted_results:
+        result.similarity = rrf_score  # Replace with RRF score for transparency
+        final_results.append(result)
+    
+    return final_results
+
+
+async def hybrid_search(
+    session: AsyncSession,
+    query: str,
+    query_embedding: List[float],
+    limit: int = None,
+    vector_weight: float = 0.6,
+    keyword_weight: float = 0.4
+) -> List[SearchResult]:
+    """
+    Perform hybrid search combining vector similarity and keyword matching.
+    
+    This approach combines:
+    1. Vector search (semantic similarity via embeddings)
+    2. Keyword search (lexical matching via PostgreSQL full-text search)
+    
+    Results are combined using Reciprocal Rank Fusion (RRF).
+    
+    Args:
+        session: Database session
+        query: Original query text (for keyword search)
+        query_embedding: Query embedding vector (for vector search)
+        limit: Maximum number of final results
+        vector_weight: Weight for vector results (default 0.6)
+        keyword_weight: Weight for keyword results (default 0.4)
+        
+    Returns:
+        Combined list of SearchResult instances
+    """
+    if limit is None:
+        limit = settings.top_k_results
+    
+    # Fetch more results initially for better fusion
+    fetch_limit = limit * 3
+    
+    logger.info(f"Hybrid search: vector_weight={vector_weight}, keyword_weight={keyword_weight}")
+    
+    # Perform both searches
+    vector_results = await vector_search(session, query_embedding, limit=fetch_limit)
+    keyword_results = await keyword_search(session, query, limit=fetch_limit)
+    
+    logger.info(f"Vector search: {len(vector_results)} results, Keyword search: {len(keyword_results)} results")
+    
+    # Combine using RRF
+    combined_results = reciprocal_rank_fusion(
+        vector_results,
+        keyword_results,
+        vector_weight=vector_weight,
+        keyword_weight=keyword_weight
+    )
+    
+    # Return top results
+    final_results = combined_results[:limit]
+    logger.info(f"Hybrid search returning {len(final_results)} results")
+    
+    return final_results
+
+
 async def search_knowledge_base(
     session: AsyncSession,
     query_embedding: List[float],

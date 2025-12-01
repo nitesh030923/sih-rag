@@ -87,7 +87,9 @@ class DoclingHybridChunker:
         self.config = config
 
         # Initialize tokenizer for token-aware chunking
-        model_id = "sentence-transformers/all-MiniLM-L6-v2"
+        # Using bert-base-uncased as a generic tokenizer that works well with most embedding models
+        # This avoids mismatch issues when using different embedding models like nomic-embed-text
+        model_id = "bert-base-uncased"
         logger.info(f"Initializing tokenizer: {model_id}")
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
@@ -99,6 +101,26 @@ class DoclingHybridChunker:
         )
 
         logger.info(f"HybridChunker initialized (max_tokens={config.max_tokens})")
+
+    def _build_contextual_prefix(self, title: str, source: str, chunk_index: int, total_chunks: int) -> str:
+        """
+        Build a contextual prefix for a chunk to improve retrieval.
+        
+        This prefix helps embedding models understand:
+        - Which document the chunk belongs to
+        - The source/location of the document
+        - The chunk's position in the document
+        
+        Args:
+            title: Document title
+            source: Document source path
+            chunk_index: Index of this chunk (0-based)
+            total_chunks: Total number of chunks in document
+            
+        Returns:
+            Contextual prefix string
+        """
+        return f"Document: {title}\nSource: {source}\nChunk: {chunk_index + 1}/{total_chunks}"
 
     async def chunk_document(
         self,
@@ -142,24 +164,30 @@ class DoclingHybridChunker:
 
             for i, chunk in enumerate(chunks):
                 contextualized_text = self.chunker.contextualize(chunk=chunk)
+                
+                # Add contextual prefix for better retrieval
+                # This helps the embedding model understand the context of the chunk
+                contextual_prefix = self._build_contextual_prefix(title, source, i, len(chunks))
+                prefixed_content = f"{contextual_prefix}\n\n{contextualized_text.strip()}"
 
                 # Count actual tokens
-                token_count = len(self.tokenizer.encode(contextualized_text))
+                token_count = len(self.tokenizer.encode(prefixed_content))
 
                 # Create chunk metadata
                 chunk_metadata = {
                     **base_metadata,
                     "total_chunks": len(chunks),
                     "token_count": token_count,
-                    "has_context": True 
+                    "has_context": True,
+                    "has_prefix": True
                 }
 
                 # Estimate character positions
                 start_char = current_pos
-                end_char = start_char + len(contextualized_text)
+                end_char = start_char + len(prefixed_content)
 
                 document_chunks.append(DocumentChunk(
-                    content=contextualized_text.strip(),
+                    content=prefixed_content,
                     index=i,
                     start_char=start_char,
                     end_char=end_char,
