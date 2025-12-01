@@ -35,15 +35,22 @@ async def lifespan(app: FastAPI):
     logger.info(f"Embedding Model: {settings.ollama_embedding_model}")
     
     try:
+        # Initialize DB connection
         await db_manager.initialize()
         logger.info("Database initialized successfully")
+
+        # Ensure tables exist
+        logger.info("Creating database tables if not present...")
+        await db_manager.create_tables()
+
+        # Health check
         if await db_manager.health_check():
             logger.info("Database connection verified")
         else:
             logger.warning("Database health check failed")
-        
+
         yield
-        
+
     finally:
         logger.info("Shutting down RAG Backend API...")
         await db_manager.close()

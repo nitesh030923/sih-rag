@@ -88,9 +88,9 @@ class DatabaseManager:
             raise RuntimeError("Database not initialized")
         
         async with self.engine.begin() as conn:
-            # Enable pgvector extension
-            await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-            await conn.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
+            # Enable pgvector extension (must wrap in text())
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
             
             # Create all tables
             await conn.run_sync(Base.metadata.create_all)
