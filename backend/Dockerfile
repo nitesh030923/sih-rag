@@ -1,4 +1,4 @@
-# Dockerfile for RAG Backend with Ollama
+# Dockerfile for RAG Backend - Works on both CPU and GPU systems
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -23,6 +23,7 @@ COPY backend ./backend
 COPY documents ./documents
 
 # Install Python dependencies
+# PyTorch will auto-detect GPU/CPU at runtime
 RUN uv pip install --system -e .
 
 # Set environment variables

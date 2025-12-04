@@ -88,12 +88,41 @@ class DatabaseManager:
             raise RuntimeError("Database not initialized")
         
         async with self.engine.begin() as conn:
-            # Enable pgvector extension
-            await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-            await conn.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
+            # Enable pgvector extension (must wrap in text())
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
+            # Enable pg_trgm extension for fuzzy text matching
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
             
             # Create all tables
             await conn.run_sync(Base.metadata.create_all)
+            
+            # Create HNSW index for faster vector search
+            # HNSW (Hierarchical Navigable Small World) provides much faster approximate nearest neighbor search
+            # m=16: number of connections per layer (higher = more accurate but slower build)
+            # ef_construction=64: size of dynamic candidate list during construction
+            await conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw_idx 
+                ON chunks USING hnsw (embedding vector_cosine_ops)
+                WITH (m = 16, ef_construction = 64)
+            """))
+            logger.info("HNSW index created for vector search")
+            
+            # Create GIN index for full-text search (BM25-style keyword search)
+            # This enables hybrid search combining vector + keyword matching
+            await conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS chunks_content_fts_idx 
+                ON chunks USING gin (to_tsvector('english', content))
+            """))
+            logger.info("GIN index created for full-text search")
+            
+            # Create GIN index for trigram fuzzy matching
+            # This enables fuzzy keyword search that handles OCR errors and typos
+            await conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS chunks_content_trgm_idx 
+                ON chunks USING gin (content gin_trgm_ops)
+            """))
+            logger.info("Trigram index created for fuzzy search")
         
         logger.info("Database tables created")
     

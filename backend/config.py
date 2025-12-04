@@ -28,7 +28,10 @@ class Settings(BaseSettings):
     
     # RAG Configuration
     top_k_results: int = 5
-    similarity_threshold: float = 0.7
+    similarity_threshold: float = 0.3
+    use_hybrid_search: bool = True  # Enable hybrid search (vector + keyword)
+    hybrid_vector_weight: float = 0.6  # Weight for vector search in hybrid mode
+    hybrid_keyword_weight: float = 0.4  # Weight for keyword search in hybrid mode
     
     # API Configuration
     api_host: str = "0.0.0.0"
