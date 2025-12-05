@@ -110,26 +110,17 @@ OLLAMA_LLM_MODEL=mistral
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 ```
 
-**Frontend (.env.local in frontend/):**
-```bash
-cd frontend
-```
-
-Create `frontend/.env.local`:
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
 #### 3. Start All Services
 
 ```bash
-# Start PostgreSQL + Backend
+# Start all services (PostgreSQL + Backend + Frontend)
 docker compose up -d
 
-# Start Frontend (in separate terminal)
-cd frontend
-npm install
-npm run dev
+# Check logs
+docker compose logs -f
+
+# Check status
+docker compose ps
 ```
 
 **Access Points:**
@@ -249,8 +240,34 @@ Frontend at http://localhost:3000, Backend at http://localhost:8000
 ## 🐳 Docker Services
 
 - **postgres** - PostgreSQL 15 with PGVector extension (port 5433)
-- **backend** - FastAPI application with auto-reload (port 8000)
+- **backend** - FastAPI application with hot-reload (port 8000)
+- **frontend** - Next.js application (port 3000)
 - **ingestion** - One-time batch document processing (profile: ingestion)
+
+### Docker Commands
+
+```bash
+# Start all services
+docker compose up -d
+
+# Stop all services
+docker compose down
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# View logs
+docker compose logs -f
+docker compose logs -f backend
+docker compose logs -f frontend
+
+# Restart specific service
+docker compose restart backend
+docker compose restart frontend
+
+# Run ingestion job
+docker compose --profile ingestion up ingestion
+```
 
 ## 🎨 Frontend Architecture
 

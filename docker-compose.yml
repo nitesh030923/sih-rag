@@ -41,6 +41,20 @@ services:
     command: ["python", "-m", "backend.main"]
     restart: unless-stopped
 
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rag_frontend
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
   # Document Ingestion (run manually)
   ingestion:
     build:
