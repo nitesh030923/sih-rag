@@ -11,6 +11,18 @@ from datetime import datetime
 # Chat Schemas
 # ============================================================================
 
+class Citation(BaseModel):
+    """Source citation for a response."""
+    number: int = Field(..., description="Citation number in the response")
+    chunk_id: str = Field(..., description="ID of the source chunk")
+    document_id: str = Field(..., description="ID of the source document")
+    document_title: str = Field(..., description="Title of the source document")
+    document_source: str = Field(..., description="Source path/filename")
+    content: str = Field(..., description="Content of the cited chunk")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata (page, timestamp, etc.)")
+    similarity: Optional[float] = Field(default=None, description="Similarity score if from search")
+
+
 class ChatMessage(BaseModel):
     """Message in conversation history."""
     role: str = Field(..., description="Message role: 'user' or 'assistant'")
@@ -32,6 +44,10 @@ class ChatResponse(BaseModel):
     conversation_history: List[ChatMessage] = Field(
         ...,
         description="Updated conversation history"
+    )
+    citations: List[Citation] = Field(
+        default_factory=list,
+        description="Source citations for the response"
     )
 
 

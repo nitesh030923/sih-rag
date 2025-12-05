@@ -17,6 +17,7 @@ from backend.api.schemas import (
     ChatRequest,
     ChatResponse,
     ChatMessage,
+    Citation,
     SearchRequest,
     SearchResponse,
     SearchResultItem,
@@ -124,9 +125,16 @@ async def chat(
             for msg in result["conversation_history"]
         ]
         
+        # Convert citations to Citation objects
+        citations = [
+            Citation(**citation)
+            for citation in result.get("citations", [])
+        ]
+        
         return ChatResponse(
             response=result["response"],
-            conversation_history=updated_history
+            conversation_history=updated_history,
+            citations=citations
         )
         
     except ValueError as e:
@@ -184,8 +192,26 @@ async def chat_stream(
                     for msg in request.conversation_history
                 ]
             
-            # Send status: searching
+            # Search knowledge base for citations
             yield f"data: {json.dumps({'status': 'searching'})}\n\n"
+            search_results = await rag_engine.search(session, request.message)
+            
+            # Build citations
+            citations = []
+            for i, result in enumerate(search_results, 1):
+                citations.append({
+                    "number": i,
+                    "chunk_id": str(result.chunk_id),
+                    "document_id": str(result.document_id),
+                    "document_title": result.document_title,
+                    "document_source": result.document_source,
+                    "content": result.content,
+                    "metadata": result.chunk_metadata,
+                    "similarity": result.similarity
+                })
+            
+            # Send citations
+            yield f"data: {json.dumps({'status': 'citations', 'citations': citations})}\n\n"
             
             # Stream response
             yield f"data: {json.dumps({'status': 'generating'})}\n\n"

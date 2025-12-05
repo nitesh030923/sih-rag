@@ -199,10 +199,27 @@ Your Answer (synthesize the information above into a clear response):"""
             conversation_history: Optional conversation history
             
         Returns:
-            Dictionary with response and updated conversation history
+            Dictionary with response, citations, and updated conversation history
         """
+        # Search knowledge base for citations
+        search_results = await self.search(session, user_query)
+        
         # Generate answer
         answer = await self.generate_answer(session, user_query, conversation_history)
+        
+        # Build citations from search results
+        citations = []
+        for i, result in enumerate(search_results, 1):
+            citations.append({
+                "number": i,
+                "chunk_id": str(result.chunk_id),
+                "document_id": str(result.document_id),
+                "document_title": result.document_title,
+                "document_source": result.document_source,
+                "content": result.content,
+                "metadata": result.chunk_metadata,
+                "similarity": result.similarity
+            })
         
         # Update conversation history
         if conversation_history is None:
@@ -214,7 +231,8 @@ Your Answer (synthesize the information above into a clear response):"""
         
         return {
             "response": answer,
-            "conversation_history": updated_history
+            "conversation_history": updated_history,
+            "citations": citations
         }
 
 

@@ -173,6 +173,19 @@ class DoclingHybridChunker:
                 # Count actual tokens
                 token_count = len(self.tokenizer.encode(prefixed_content))
 
+                # Extract page information from chunk metadata
+                page_number = None
+                if hasattr(chunk, 'meta') and chunk.meta:
+                    # Try to get page number from chunk metadata
+                    if hasattr(chunk.meta, 'doc_items') and chunk.meta.doc_items:
+                        # Get the first doc item's page number
+                        first_item = chunk.meta.doc_items[0]
+                        if hasattr(first_item, 'prov') and first_item.prov:
+                            for prov in first_item.prov:
+                                if hasattr(prov, 'page_no'):
+                                    page_number = prov.page_no
+                                    break
+
                 # Create chunk metadata
                 chunk_metadata = {
                     **base_metadata,
@@ -181,6 +194,10 @@ class DoclingHybridChunker:
                     "has_context": True,
                     "has_prefix": True
                 }
+                
+                # Add page number if available
+                if page_number is not None:
+                    chunk_metadata["page"] = page_number
 
                 # Estimate character positions
                 start_char = current_pos
