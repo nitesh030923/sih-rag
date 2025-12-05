@@ -14,12 +14,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from backend.config import settings
 from backend.database.connection import db_manager
 from backend.api.routes import router
-
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, settings.log_level),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+from backend.core.observability import (
+    configure_logging,
+    setup_metrics,
+    RequestIDMiddleware
 )
+
+# Configure structured logging
+configure_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,12 @@ app = FastAPI(
     description="RAG Knowledge Assistant API powered by Ollama",
     lifespan=lifespan
 )
+
+# Add observability middleware
+app.add_middleware(RequestIDMiddleware)
+
+# Setup Prometheus metrics
+setup_metrics(app)
 
 app.add_middleware(
     CORSMiddleware,

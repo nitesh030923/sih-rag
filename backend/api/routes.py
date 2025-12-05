@@ -43,6 +43,12 @@ from backend.ingestion.pipeline import IngestionPipeline
 from backend.ingestion.chunker import DoclingHybridChunker, ChunkingConfig
 from backend.ingestion.embedder import OllamaEmbedder
 
+try:
+    from backend.core.observability import metrics
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 # Create router
@@ -116,6 +122,11 @@ async def chat(
                 for msg in request.conversation_history
             ]
         
+        logger.info("Processing chat request", extra={
+            "query_length": len(request.message),
+            "has_history": bool(conversation_history)
+        })
+        
         # Generate response using RAG
         result = await rag_engine.chat(session, request.message, conversation_history)
         
@@ -131,6 +142,11 @@ async def chat(
             for citation in result.get("citations", [])
         ]
         
+        logger.info("Chat request completed", extra={
+            "response_length": len(result["response"]),
+            "citations_count": len(citations)
+        })
+        
         return ChatResponse(
             response=result["response"],
             conversation_history=updated_history,
@@ -138,6 +154,8 @@ async def chat(
         )
         
     except ValueError as e:
+        if METRICS_AVAILABLE:
+            metrics.rag_requests_total.labels(status="error").inc()
         logger.error(f"Chat validation error: {e}", exc_info=True)
         raise HTTPException(
             status_code=400,
@@ -148,6 +166,8 @@ async def chat(
             }
         )
     except ConnectionError as e:
+        if METRICS_AVAILABLE:
+            metrics.rag_requests_total.labels(status="error").inc()
         logger.error(f"Chat connection error: {e}", exc_info=True)
         raise HTTPException(
             status_code=503,
@@ -160,6 +180,8 @@ async def chat(
             }
         )
     except Exception as e:
+        if METRICS_AVAILABLE:
+            metrics.rag_requests_total.labels(status="error").inc()
         logger.error(f"Chat endpoint error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,

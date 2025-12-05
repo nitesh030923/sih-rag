@@ -31,6 +31,12 @@ from backend.database.operations import (
 from backend.ingestion.chunker import ChunkingConfig, create_chunker, DocumentChunk
 from backend.ingestion.embedder import OllamaEmbedder
 
+try:
+    from backend.core.observability import metrics
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -261,6 +267,12 @@ class IngestionPipeline:
         
         processing_time = (datetime.now() - start_time).total_seconds()
         logger.info(f"Saved document to database: {document.id}")
+        
+        # Record metrics
+        if METRICS_AVAILABLE:
+            metrics.ingestion_documents_total.labels(status="success").inc()
+            metrics.ingestion_chunks_created.inc(len(chunks))
+            metrics.ingestion_duration.observe(processing_time)
         
         return {
             "title": title,

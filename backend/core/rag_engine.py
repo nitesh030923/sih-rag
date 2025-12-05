@@ -4,6 +4,7 @@ Combines vector search with Ollama LLM to answer questions.
 """
 
 import logging
+import time
 from typing import List, Dict, Any, Optional, AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.ollama_client import ollama_client
 from backend.database.operations import vector_search, hybrid_search, SearchResult
 from backend.config import settings
+from backend.core.observability import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +80,15 @@ Your Answer (synthesize the information above into a clear response):"""
         Returns:
             List of SearchResult instances
         """
+        start_time = time.time()
+        
         # Generate embedding for query
         logger.info(f"Generating embedding for query: {query[:50]}...")
         query_embedding = await self.ollama.generate_embedding(query)
         
         # Determine search method
         should_use_hybrid = use_hybrid if use_hybrid is not None else self.use_hybrid_search
+        search_method = "hybrid" if should_use_hybrid else "vector"
         
         # Search vector database
         if should_use_hybrid:
@@ -102,7 +107,12 @@ Your Answer (synthesize the information above into a clear response):"""
                 limit=limit or settings.top_k_results
             )
         
-        logger.info(f"Found {len(results)} relevant chunks")
+        # Record metrics
+        search_duration = time.time() - start_time
+        metrics.rag_search_latency.labels(method=search_method).observe(search_duration)
+        metrics.rag_chunks_retrieved.observe(len(results))
+        
+        logger.info(f"Found {len(results)} relevant chunks in {search_duration:.2f}s")
         return results
     
     async def generate_answer(
@@ -141,7 +151,13 @@ Your Answer (synthesize the information above into a clear response):"""
         
         # Generate response
         logger.info("Generating response...")
+        start_time = time.time()
         answer = await self.ollama.generate_chat_completion(prompt)
+        generation_duration = time.time() - start_time
+        
+        # Record metrics
+        metrics.rag_generation_latency.labels(model=settings.ollama_llm_model).observe(generation_duration)
+        logger.info(f"Generated response in {generation_duration:.2f}s")
         
         return answer
     
@@ -206,6 +222,9 @@ Your Answer (synthesize the information above into a clear response):"""
         
         # Generate answer
         answer = await self.generate_answer(session, user_query, conversation_history)
+        
+        # Record success metric
+        metrics.rag_requests_total.labels(status="success").inc()
         
         # Build citations from search results
         citations = []
