@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Paperclip, FileText, X, Sparkles, MessageSquare, Trash2, Plus, BookOpen, ChevronDown, ChevronUp, User, Edit2, Check } from 'lucide-react';
+import { Send, Loader2, Paperclip, FileText, X, Sparkles, MessageSquare, Trash2, Plus, BookOpen, ChevronDown, ChevronUp, User, Edit2, Check, BarChart3 } from 'lucide-react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -304,6 +305,15 @@ export function ChatInterface() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <Link href="/metrics">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                  >
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Metrics
+                  </Button>
+                </Link>
                 <Button
                   variant="outline"
                   size="sm"
