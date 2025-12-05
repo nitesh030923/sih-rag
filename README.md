@@ -1,57 +1,85 @@
-# RAG Backend with Ollama
+# Multimodal RAG System with Ollama
 
-A production-ready **Retrieval-Augmented Generation (RAG)** backend built with FastAPI, SQLAlchemy, PostgreSQL/PGVector, and Ollama for fully local/offline LLM inference.
+A production-ready **Retrieval-Augmented Generation (RAG)** system with full-stack implementation: FastAPI backend, Next.js frontend, PostgreSQL/PGVector, and Ollama for fully local/offline LLM inference.
 
 ## 🌟 Features
 
-- ✅ **Ollama-based** - fully offline
-- ✅ **FastAPI Backend** - RESTful API with streaming support
-- ✅ **SQLAlchemy ORM** - Clean database layer with async support
+### Backend
+- ✅ **Ollama-based** - fully offline LLM inference
+- ✅ **FastAPI Backend** - RESTful API with Server-Sent Events (SSE) streaming
+- ✅ **SQLAlchemy ORM** - Async database operations with clean architecture
 - ✅ **PGVector Integration** - Semantic search with 768-dim embeddings
 - ✅ **Multi-format Support** - PDF, Word, Excel, PowerPoint, Markdown, Audio
 - ✅ **Hybrid Chunking** - Intelligent document splitting with Docling
-- ✅ **Audio Transcription** - Whisper ASR for MP3/WAV files
-- ✅ **Clean Architecture** - Organized, maintainable, testable code
+- ✅ **Audio Transcription** - Whisper ASR for MP3/WAV/M4A/FLAC files
+- ✅ **Citation Tracking** - Source attribution with page numbers
+
+### Frontend
+- ✅ **Next.js 14** - React with App Router and TypeScript
+- ✅ **Real-time Streaming** - Server-Sent Events for live LLM responses
+- ✅ **Modern UI** - shadcn/ui components with Tailwind CSS
+- ✅ **Chat Interface** - ChatGPT-style conversation experience
+- ✅ **Document Management** - Upload, view, and manage knowledge base
+- ✅ **Citation Display** - Interactive source references with expand/collapse
+- ✅ **Conversation History** - Persistent chat sessions with rename/delete
+- ✅ **Dark Theme** - Optimized for readability
 
 ## 📁 Project Structure
 
 ```
 sih-rag/
-├── backend/
+├── backend/                    # FastAPI Backend
 │   ├── api/                    # API layer
-│   │   ├── routes.py           # All endpoints
-│   │   └── schemas.py          # Pydantic models
+│   │   ├── routes.py           # REST endpoints
+│   │   └── schemas.py          # Pydantic request/response models
 │   ├── core/                   # Business logic
 │   │   ├── ollama_client.py    # Ollama HTTP client
-│   │   └── rag_engine.py       # RAG orchestration
+│   │   └── rag_engine.py       # RAG orchestration & prompts
 │   ├── database/               # Data layer
-│   │   ├── connection.py       # SQLAlchemy setup
-│   │   ├── models.py           # Document & Chunk models
+│   │   ├── connection.py       # SQLAlchemy async setup
+│   │   ├── models.py           # Document & Chunk ORM models
 │   │   └── operations.py       # CRUD & vector search
 │   ├── ingestion/              # Document processing
-│   │   ├── pipeline.py         # Main ingestion script
-│   │   ├── chunker.py          # Document chunking
-│   │   └── embedder.py         # Embedding generation
-│   ├── config.py               # Centralized settings
-│   └── main.py                 # FastAPI app
-├── documents/                  # Place documents here
+│   │   ├── pipeline.py         # Main ingestion orchestrator
+│   │   ├── chunker.py          # Docling HybridChunker
+│   │   └── embedder.py         # Ollama embedding generation
+│   ├── config.py               # Centralized configuration
+│   └── main.py                 # FastAPI application entry
+│
+├── frontend/                   # Next.js Frontend
+│   ├── src/
+│   │   ├── app/                # App Router pages
+│   │   │   ├── page.tsx        # Home page with chat interface
+│   │   │   └── globals.css     # Global styles & CSS variables
+│   │   ├── components/         # React components
+│   │   │   ├── ui/             # shadcn/ui primitives
+│   │   │   └── chat-interface.tsx  # Main chat component
+│   │   └── lib/                # Utilities & shared logic
+│   │       ├── api.ts          # Backend API client
+│   │       ├── store.ts        # Zustand state management
+│   │       └── types.ts        # TypeScript interfaces
+│   ├── public/                 # Static assets
+│   └── package.json            # Dependencies
+│
+├── documents/                  # Place documents here for ingestion
 ├── sql/
-│   └── schema.sql              # PostgreSQL schema
+│   └── schema.sql              # PostgreSQL schema with pgvector
 ├── docker-compose.yml          # Container orchestration
+├── docker-compose.gpu.yml      # GPU-enabled variant
 ├── Dockerfile                  # Backend container
-├── pyproject.toml              # Dependencies
-└── .env.example                # Environment template
+└── pyproject.toml              # Python dependencies
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- **Docker & Docker Compose** (recommended)
+- **Docker & Docker Compose** (recommended for easy deployment)
 - **Ollama** installed and running locally
+- **Node.js 18+** (for frontend)
 - **FFmpeg** (optional, for audio transcription)
 
-### Option 1: Docker Deployment (Recommended)
+### Option 1: Full Stack with Docker (Recommended)
 
 #### 1. Install Ollama
 
@@ -59,61 +87,80 @@ Download from [ollama.ai](https://ollama.ai)
 
 ```bash
 # Pull required models
-ollama pull mistral          # LLM for chat
+ollama pull mistral          # LLM for chat (7B parameters)
 ollama pull nomic-embed-text # 768-dim embeddings
 
-# Verify
+# Verify installation
 ollama list
 ```
 
 #### 2. Configure Environment
 
+**Backend (.env in root):**
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` to point to your host's Ollama (Docker containers need host network):
+Edit `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/offrag
-OLLAMA_BASE_URL=http://host.docker.internal:11434  # For Mac/Windows
-# OLLAMA_BASE_URL=http://172.17.0.1:11434           # For Linux
+OLLAMA_BASE_URL=http://host.docker.internal:11434  # Mac/Windows
+# OLLAMA_BASE_URL=http://172.17.0.1:11434           # Linux
 OLLAMA_LLM_MODEL=mistral
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+```
+
+**Frontend (.env.local in frontend/):**
+```bash
+cd frontend
+```
+
+Create `frontend/.env.local`:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 #### 3. Start All Services
 
 ```bash
 # Start PostgreSQL + Backend
-docker-compose up -d
+docker compose up -d
 
-# Check logs
-docker-compose logs -f backend
+# Start Frontend (in separate terminal)
+cd frontend
+npm install
+npm run dev
 ```
 
-API available at:
-- **Base**: http://localhost:8000
-- **Docs**: http://localhost:8000/docs
-- **Health**: http://localhost:8000/health
+**Access Points:**
+- 🌐 **Frontend**: http://localhost:3000
+- 🔌 **Backend API**: http://localhost:8000
+- 📚 **API Docs**: http://localhost:8000/docs
+- ❤️ **Health Check**: http://localhost:8000/health
 
 #### 4. Upload Documents
 
-**Option A: Upload via API (Recommended)**
+**Option A: Via Frontend (Easiest)**
 
-Upload individual files through the REST API:
+1. Open http://localhost:3000
+2. Click the paperclip icon (📎) in the chat input
+3. Select a document (PDF, DOCX, PPTX, XLSX, MP3, etc.)
+4. Wait for processing to complete
+5. Start asking questions!
+
+**Option B: Via Backend API**
 
 ```bash
 # Using curl
 curl -X POST http://localhost:8000/upload \
   -F "file=@/path/to/your/document.pdf"
 
-# Or use Swagger UI
-# Go to http://localhost:8000/docs → /upload endpoint
+# Or use Swagger UI at http://localhost:8000/docs
 ```
 
-**Option B: Batch Ingestion**
+**Option C: Batch Ingestion**
 
-Process all files in the `documents/` folder at once:
+Process all files in the `documents/` folder:
 
 ```bash
 # Using API endpoint
@@ -126,80 +173,97 @@ docker-compose --profile ingestion up ingestion
 ```
 
 **Supported formats:**
-- 📄 PDF, Word, PowerPoint, Excel
-- 📝 Markdown, Text
-- 🎵 MP3, WAV, M4A, FLAC
+- 📄 **Documents**: PDF, DOCX, PPTX, XLSX
+- 📝 **Text**: Markdown, TXT, HTML
+- 🎵 **Audio**: MP3, WAV, M4A, FLAC (auto-transcribed)
 
-#### 5. Stop Services
+#### 5. Using the Chat Interface
+
+Once documents are uploaded:
+
+1. **Ask Questions**: Type naturally in the chat box
+   - "What are the key financial results?"
+   - "Summarize the main points"
+   - "What did John say about the budget?" (from audio)
+
+2. **View Citations**: Click on citation cards to see sources with page numbers
+
+3. **Manage Conversations**: 
+   - Create new chats with "New Chat" button
+   - Rename conversations by clicking the edit icon
+   - Delete old conversations with the trash icon
+
+4. **View Documents**: Click "X Docs" button to see uploaded files
+
+#### 6. Stop Services
 
 ```bash
-docker-compose down
-```
+# Stop all containers
+docker compose down
 
+# Stop frontend (Ctrl+C in terminal)
+```
 ---
 
-### Option 2: Local Development (Without Docker)
 
-Use this for development only. Requires Python 3.9+ and PostgreSQL 15.
+Use this for development. Requires Python 3.9+ and PostgreSQL 15.
 
-#### 1. Install Ollama
-
-```bash
-ollama pull mistral
-ollama pull nomic-embed-text
-```
-
-#### 2. Start PostgreSQL
+#### 1. Start PostgreSQL
 
 ```bash
-docker-compose up -d postgres
+docker compose up -d postgres
 ```
 
-#### 3. Configure Environment
+#### 2. Setup Backend
 
 ```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5433/offrag
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_LLM_MODEL=mistral
-OLLAMA_EMBEDDING_MODEL=nomic-embed-text
-```
-
-#### 4. Install Dependencies
-
-```bash
+# Install dependencies
 pip install uv
 uv pip install -e .
-```
 
-#### 5. Start Backend
+# Configure environment
+cp .env.example .env
+# Edit .env with DATABASE_URL=postgresql://postgres:postgres@localhost:5433/offrag
 
-```bash
+# Start backend
 python -m backend.main
 ```
 
-API available at http://localhost:8000/docs
-
-#### 6. Upload Documents
-
-Use the `/upload` API endpoint at http://localhost:8000/docs or:
+#### 3. Setup Frontend
 
 ```bash
-curl -X POST http://localhost:8000/upload \
-  -F "file=@documents/your-file.pdf"
+cd frontend
+npm install
+
+# Create .env.local
+echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
+
+# Start dev server
+npm run dev
 ```
+
+Frontend at http://localhost:3000, Backend at http://localhost:8000
 
 ---
 
 ## 🐳 Docker Services
 
-- `postgres` - PostgreSQL 15 with PGVector extension (port 5433)
-- `backend` - FastAPI application with auto-reload (port 8000)
-- `ingestion` - One-time document ingestion job (profile: ingestion)
+- **postgres** - PostgreSQL 15 with PGVector extension (port 5433)
+- **backend** - FastAPI application with auto-reload (port 8000)
+- **ingestion** - One-time batch document processing (profile: ingestion)
+
+## 🎨 Frontend Architecture
+
+### Tech Stack
+- **Framework**: Next.js 14 with App Router
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **UI Components**: shadcn/ui (Radix UI primitives)
+- **State Management**: Zustand with persistence
+- **API Client**: Fetch API with Server-Sent Events (SSE)
+- **Markdown Rendering**: react-markdown with syntax highlighting
+- **Icons**: Lucide React
+
 
 ## 🔌 API Endpoints
 
@@ -308,84 +372,151 @@ All settings in `.env` or environment variables:
 - `API_PORT` - Server port (default: 8000)
 - `LOG_LEVEL` - Logging level (default: INFO)
 
-## 🏗️ Architecture
+### Frontend
+- `NEXT_PUBLIC_API_URL` - Backend API URL (default: http://localhost:8000)
 
-### Data Flow
+
+
+### Data Flow - Document Ingestion
 
 ```
-┌─────────────┐
-│  Documents  │
-└──────┬──────┘
+User uploads file.pdf
        │
        ▼
+┌─────────────────────────────────┐
+│  Frontend                       │
+│  - File upload via paperclip    │
+│  - Progress tracking            │
+└──────────────┬──────────────────┘
+               │ POST /upload (multipart)
+               ▼
+┌─────────────────────────────────┐
+│  Backend API                    │
+│  - Validate file                │
+│  - Save temporarily             │
+└──────────────┬──────────────────┘
+               │
+               ▼
 ┌─────────────────────────────────┐
 │  Ingestion Pipeline             │
 │  1. Read (Docling converts)     │
 │  2. Chunk (HybridChunker)       │
 │  3. Embed (Ollama)              │
 │  4. Store (PostgreSQL/PGVector) │
-└──────┬──────────────────────────┘
-       │
-       ▼
-┌──────────────────────┐
-│  PostgreSQL          │
-│  - documents table   │
-│  - chunks table      │
-│  - vector(768)       │
-└──────┬───────────────┘
-       │
-       ▼
+└──────────────┬────────────────────┘
+               │
+               ▼
 ┌─────────────────────────────────┐
-│  RAG Engine                     │
-│  1. User Query                  │
-│  2. Generate Embedding (Ollama) │
-│  3. Vector Search (Cosine)      │
-│  4. Build Prompt + Context      │
-│  5. LLM Response (Ollama)       │
+│  PostgreSQL + PGVector          │
+│  - documents (metadata)         │
+│  - chunks (text + vector(768))  │
+└─────────────────────────────────┘
+               │
+               ▼
+       Success response
+               │
+               ▼
+┌─────────────────────────────────┐
+│  Frontend                       │
+│  - Show success toast           │
+│  - Display chunk count          │
+│  - Enable chat input            │
 └─────────────────────────────────┘
 ```
 
-### Components
+### Data Flow - Chat Query
 
-1. **Ollama Client** (`backend/core/ollama_client.py`)
+```
+User types: "What are the financial results?"
+       │
+       ▼
+┌─────────────────────────────────┐
+│  Frontend                       │
+│  - Add to conversation state    │
+│  - Display user message         │
+└──────────────┬──────────────────┘
+               │ POST /chat/stream
+               ▼
+┌─────────────────────────────────┐
+│  Backend API (SSE endpoint)     │
+│  - Receive query                │
+│  - Call RAG Engine              │
+└──────────────┬──────────────────┘
+               │
+               ▼
+┌─────────────────────────────────┐
+│  RAG Engine                     │
+│  1. Generate query embedding    │
+└──────────────┬──────────────────┘
+               │
+               ▼
+┌─────────────────────────────────┐
+│  Database Operations            │
+│  - Vector similarity search     │
+│  - Cosine distance < threshold  │
+│  - Return top K chunks          │
+└──────────────┬──────────────────┘
+               │ Top 5 chunks + metadata
+               ▼
+┌─────────────────────────────────┐
+│  RAG Engine                     │
+│  2. Build prompt with context   │
+│  3. Send citations via SSE      │
+│  4. Call Ollama LLM (streaming) │
+└──────────────┬──────────────────┘
+               │ Stream tokens
+               ▼
+┌─────────────────────────────────┐
+│  Backend API                    │
+│  - Send SSE: citations          │
+│  - Send SSE: tokens (streaming) │
+│  - Send SSE: done signal        │
+└──────────────┬──────────────────┘
+               │ Server-Sent Events
+               ▼
+┌─────────────────────────────────┐
+│  Frontend                       │
+│  - Display citations first      │
+│  - Stream assistant response    │
+│  - Render markdown + code       │
+│  - Save to conversation         │
+└─────────────────────────────────┘
+```
+
+### Components Interaction
+
+**1. Ollama Client** (`backend/core/ollama_client.py`)
    - HTTP client for Ollama API
    - Handles embeddings and chat completions
-   - Streaming support
+   - Streaming support for real-time responses
 
-2. **RAG Engine** (`backend/core/rag_engine.py`)
-   - Always-search pattern (no function calling)
-   - Combines retrieval + generation
-   - Context injection into prompts
+**2. RAG Engine** (`backend/core/rag_engine.py`)
+   - Always-search pattern (retrieves context for every query)
+   - Combines retrieval + generation in single flow
+   - Prompt engineering with CRITICAL INSTRUCTIONS for focused answers
+   - Citation tracking from search results
 
-3. **Database Layer** (`backend/database/`)
-   - SQLAlchemy async models
-   - PGVector integration
-   - CRUD operations + vector search
+**3. Database Layer** (`backend/database/`)
+   - SQLAlchemy async ORM models
+   - PGVector integration for semantic search
+   - CRUD operations with connection pooling
+   - Cosine similarity search with configurable threshold
 
-4. **Ingestion Pipeline** (`backend/ingestion/`)
-   - Multi-format document processing
-   - Docling HybridChunker for intelligent splitting
+**4. Ingestion Pipeline** (`backend/ingestion/`)
+   - Multi-format document processing via Docling
+   - HybridChunker for semantic-aware splitting
+   - Page number extraction from PDF metadata
    - Batch embedding generation
+   - Audio transcription with Whisper ASR
+
+**5. Frontend Components**
+   - **ChatInterface**: Main conversation UI with streaming
+   - **API Client**: SSE handling and error management
+   - **Store**: Zustand for conversation persistence
+   - **UI Components**: shadcn/ui with Radix primitives
 
 ## 🧪 Development
 
-### Running Tests
-
-```bash
-pytest
-```
-
-### Code Quality
-
-```bash
-# Format
-black backend/
-
-# Lint
-ruff check backend/
-
-# Type check
-mypy backend/
 ```
 
 ## 📊 Database Schema
@@ -417,33 +548,85 @@ mypy backend/
 
 ## 🐛 Troubleshooting
 
-### Ollama Not Responding
+### Frontend Issues
 
+**Port 3000 already in use:**
+```bash
+# Kill process on port 3000
+lsof -ti:3000 | xargs kill -9
+
+# Or use different port
+npm run dev -- -p 3001
+```
+
+**API connection errors:**
+```bash
+# Verify backend is running
+curl http://localhost:8000/health
+
+# Check NEXT_PUBLIC_API_URL in frontend/.env.local
+# Should match backend URL (http://localhost:8000)
+```
+
+**Build errors:**
+```bash
+# Clear Next.js cache
+cd frontend
+rm -rf .next node_modules
+npm install
+npm run dev
+```
+
+### Backend Issues
+
+**Ollama Not Responding:**
 ```bash
 # Check Ollama is running
 ollama list
 
 # Restart Ollama
 ollama serve
+
+# Test model
+ollama run mistral "Hello"
 ```
 
-### Database Connection Error
-
+**Database Connection Error:**
 ```bash
 # Check PostgreSQL is running
-docker-compose ps
+docker compose ps
 
 # Check logs
-docker-compose logs postgres
+docker compose logs postgres
+
+# Recreate database
+docker compose down -v
+docker compose up -d postgres
 ```
 
-### Import Errors
-
+**Import Errors:**
 ```bash
 # Reinstall dependencies
+pip install uv
 uv pip install -e . --force-reinstall
 ```
 
+**Slow embedding generation:**
+- Use GPU-enabled Ollama for faster processing
+- Reduce chunk size in ingestion settings
+- Consider upgrading to more powerful Ollama models
+
 ---
 
-**Built with ❤️ using Ollama, FastAPI, SQLAlchemy, and PostgreSQL/PGVector**
+## 📝 License
+
+This project is built for educational purposes as part of Smart India Hackathon 2025.
+
+---
+
+**Built with ❤️ using:**
+- **Frontend**: Next.js, TypeScript, Tailwind CSS, shadcn/ui
+- **Backend**: FastAPI, SQLAlchemy, Pydantic
+- **Database**: PostgreSQL with PGVector extension
+- **LLM**: Ollama (Mistral for chat, nomic-embed-text for embeddings)
+- **Document Processing**: Docling with Whisper ASR
