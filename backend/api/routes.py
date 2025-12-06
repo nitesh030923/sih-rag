@@ -253,7 +253,13 @@ async def chat_stream(
             # Send completion event
             yield f"data: {json.dumps({'status': 'done', 'response': full_response})}\n\n"
             
+            # Record success metric
+            if METRICS_AVAILABLE:
+                metrics.rag_requests_total.labels(status="success").inc()
+            
         except Exception as e:
+            if METRICS_AVAILABLE:
+                metrics.rag_requests_total.labels(status="error").inc()
             logger.error(f"Streaming error: {e}", exc_info=True)
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
     

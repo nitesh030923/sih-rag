@@ -234,10 +234,16 @@ Your Answer (synthesize the information above into a clear response):"""
         # Build prompt
         prompt = self._build_prompt(query, context, conversation_history)
         
-        # Stream response
+        # Stream response with timing
         logger.info("Streaming response...")
+        start_time = time.time()
         async for chunk in self.ollama.generate_chat_completion_stream(prompt):
             yield chunk
+        
+        # Record generation metrics
+        generation_duration = time.time() - start_time
+        metrics.rag_generation_latency.labels(model=settings.ollama_llm_model).observe(generation_duration)
+        logger.info(f"Generation completed in {generation_duration:.2f}s")
     
     async def chat(
         self,
