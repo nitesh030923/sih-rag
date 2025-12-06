@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     hybrid_vector_weight: float = 0.6  # Weight for vector search in hybrid mode
     hybrid_keyword_weight: float = 0.4  # Weight for keyword search in hybrid mode
     
+    # Reranker Configuration
+    reranker_enabled: bool = True  # Enable cross-encoder reranking
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_top_k: int = 30  # Number of candidates to fetch for reranking
+    reranker_batch_size: int = 32  # Batch size for reranker inference
+    
     # API Configuration
     api_host: str = "0.0.0.0"
     api_port: int = 8000

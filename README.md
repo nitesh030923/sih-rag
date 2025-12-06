@@ -9,10 +9,12 @@ A production-ready **Retrieval-Augmented Generation (RAG)** system with full-sta
 - ✅ **FastAPI Backend** - RESTful API with Server-Sent Events (SSE) streaming
 - ✅ **SQLAlchemy ORM** - Async database operations with clean architecture
 - ✅ **PGVector Integration** - Semantic search with 768-dim embeddings
+- ✅ **Cross-Encoder Reranking** - Improved relevance with sentence-transformers
 - ✅ **Multi-format Support** - PDF, Word, Excel, PowerPoint, Markdown, Audio
 - ✅ **Hybrid Chunking** - Intelligent document splitting with Docling
 - ✅ **Audio Transcription** - Whisper ASR for MP3/WAV/M4A/FLAC files
 - ✅ **Citation Tracking** - Source attribution with page numbers
+- ✅ **Observability** - Structured JSON logging + Prometheus metrics
 
 ### Frontend
 - ✅ **Next.js 14** - React with App Router and TypeScript
@@ -22,6 +24,7 @@ A production-ready **Retrieval-Augmented Generation (RAG)** system with full-sta
 - ✅ **Document Management** - Upload, view, and manage knowledge base
 - ✅ **Citation Display** - Interactive source references with expand/collapse
 - ✅ **Conversation History** - Persistent chat sessions with rename/delete
+- ✅ **Metrics Dashboard** - Real-time performance monitoring with Recharts
 - ✅ **Dark Theme** - Optimized for readability
 
 ## 📁 Project Structure
@@ -34,7 +37,9 @@ sih-rag/
 │   │   └── schemas.py          # Pydantic request/response models
 │   ├── core/                   # Business logic
 │   │   ├── ollama_client.py    # Ollama HTTP client
-│   │   └── rag_engine.py       # RAG orchestration & prompts
+│   │   ├── rag_engine.py       # RAG orchestration & prompts
+│   │   ├── reranker.py         # Cross-encoder reranking
+│   │   └── observability.py    # Logging, metrics, tracing
 │   ├── database/               # Data layer
 │   │   ├── connection.py       # SQLAlchemy async setup
 │   │   ├── models.py           # Document & Chunk ORM models
@@ -632,6 +637,62 @@ uv pip install -e . --force-reinstall
 - Use GPU-enabled Ollama for faster processing
 - Reduce chunk size in ingestion settings
 - Consider upgrading to more powerful Ollama models
+
+**Reranker issues:**
+- See [RERANKER.md](RERANKER.md) for detailed troubleshooting
+- Disable with `RERANKER_ENABLED=false` if causing problems
+- Check logs: `docker logs rag_backend | grep -i rerank`
+
+---
+
+## 📊 Monitoring & Observability
+
+### Prometheus Metrics
+
+Access raw metrics at: **http://localhost:8000/metrics**
+
+Available metrics:
+- `rag_requests_total` - Total chat requests
+- `rag_search_latency_seconds` - Hybrid search performance
+- `rag_generation_latency_seconds` - LLM response time
+- `rag_chunks_retrieved_count` - Number of chunks per query
+- `reranker_latency_seconds` - Reranker performance
+- `reranker_rank_change_positions` - Ranking improvement
+- `ingestion_*` - Document upload metrics
+- `http_*` - Standard HTTP metrics
+
+### Visual Dashboard
+
+Access metrics dashboard at: **http://localhost:3000/metrics**
+
+Features:
+- Real-time performance graphs
+- Request throughput monitoring
+- Latency percentiles
+- Auto-refresh every 10 seconds
+
+### Structured Logging
+
+All logs are JSON-formatted with:
+- `timestamp` - ISO 8601 format
+- `request_id` - Unique request tracking
+- `level` - ERROR/WARNING/INFO/DEBUG
+- `message` - Human-readable description
+- `source` - File and line number
+
+View logs:
+```bash
+docker compose logs -f backend | jq '.'
+```
+
+### Reranking Metrics
+
+The reranker adds three specialized metrics:
+- `reranker_latency_seconds` - Cross-encoder inference time
+- `reranker_calls_total{status}` - Success/error counts
+- `reranker_rank_change_positions` - Average position change after reranking
+
+Higher rank change indicates the reranker is improving relevance.
 
 ---
 

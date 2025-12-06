@@ -24,7 +24,21 @@ class RAGEngine:
         """Initialize RAG engine."""
         self.ollama = ollama_client
         self.max_context_length = 3000
-        self.use_hybrid_search = True  # Enable hybrid search by default  
+        self.use_hybrid_search = settings.use_hybrid_search
+        self.use_reranker = settings.reranker_enabled
+        self._reranker = None  # Lazy load reranker
+    
+    def _get_reranker(self):
+        """Get or create reranker instance (lazy loading)."""
+        if self._reranker is None and self.use_reranker:
+            try:
+                from backend.core.reranker import get_reranker
+                self._reranker = get_reranker()
+                logger.info("Reranker initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize reranker: {e}")
+                self.use_reranker = False
+        return self._reranker
     
     def _build_prompt(
         self,
@@ -90,6 +104,11 @@ Your Answer (synthesize the information above into a clear response):"""
         should_use_hybrid = use_hybrid if use_hybrid is not None else self.use_hybrid_search
         search_method = "hybrid" if should_use_hybrid else "vector"
         
+        # Determine how many candidates to fetch (more if reranking)
+        fetch_limit = limit or settings.top_k_results
+        if self.use_reranker and settings.reranker_top_k > fetch_limit:
+            fetch_limit = settings.reranker_top_k
+        
         # Search vector database
         if should_use_hybrid:
             logger.info("Using hybrid search (vector + keyword)...")
@@ -97,15 +116,35 @@ Your Answer (synthesize the information above into a clear response):"""
                 session,
                 query=query,
                 query_embedding=query_embedding,
-                limit=limit or settings.top_k_results
+                limit=fetch_limit
             )
         else:
             logger.info("Using vector-only search...")
             results = await vector_search(
                 session,
                 query_embedding,
-                limit=limit or settings.top_k_results
+                limit=fetch_limit
             )
+        
+        # Apply reranking if enabled
+        if self.use_reranker and results:
+            try:
+                reranker = self._get_reranker()
+                if reranker:
+                    logger.info(f"Reranking {len(results)} results...")
+                    final_limit = limit or settings.top_k_results
+                    results = reranker.rerank(query, results, top_k=final_limit)
+                    metrics.reranker_calls_total.labels(status="success").inc()
+                else:
+                    metrics.reranker_calls_total.labels(status="disabled").inc()
+            except Exception as e:
+                logger.error(f"Reranking failed: {e}", exc_info=True)
+                metrics.reranker_calls_total.labels(status="error").inc()
+                # Continue with original results
+                if limit and len(results) > limit:
+                    results = results[:limit]
+        elif limit and len(results) > limit:
+            results = results[:limit]
         
         # Record metrics
         search_duration = time.time() - start_time

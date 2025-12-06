@@ -123,6 +123,25 @@ class Metrics:
         "ingestion_duration_seconds",
         "Time taken to ingest a document"
     )
+    
+    # Reranker Metrics
+    reranker_latency = Histogram(
+        "reranker_latency_seconds",
+        "Latency of reranking operations",
+        buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+    )
+    
+    reranker_rank_change = Histogram(
+        "reranker_rank_change_positions",
+        "How many positions the top result moved after reranking",
+        buckets=[0, 1, 2, 3, 5, 10, 20, 50]
+    )
+    
+    reranker_calls_total = Counter(
+        "reranker_calls_total",
+        "Total number of reranker calls",
+        ["status"]  # success, error, disabled
+    )
 
 metrics = Metrics()
 

@@ -85,7 +85,10 @@ async def health_check(session: AsyncSession = Depends(get_db_session)):
             model_info={
                 "llm_model": settings.ollama_llm_model,
                 "embedding_model": settings.ollama_embedding_model,
-                "embedding_dimensions": settings.embedding_dimensions
+                "embedding_dimensions": settings.embedding_dimensions,
+                "hybrid_search": settings.use_hybrid_search,
+                "reranker_enabled": settings.reranker_enabled,
+                "reranker_model": settings.reranker_model if settings.reranker_enabled else None
             }
         )
     except Exception as e:
